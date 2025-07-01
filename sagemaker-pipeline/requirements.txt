@@ -1,0 +1,4 @@
+sagemaker
+pandas
+scikit-learn
+boto3
