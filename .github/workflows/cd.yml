@@ -32,5 +32,5 @@ jobs:
 
     - name: Run SageMaker pipeline notebook
       run: |
-        papermill pipeline/pipeline_definition.ipynb output-main.ipynb \
-        -p InputDataUrl "s3://mlops-testing-bucket-kulsin/sample-data.csv"
+        papermill pipeline/pipeline_definition.ipynb output-main.ipynb
+
