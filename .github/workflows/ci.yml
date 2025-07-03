@@ -1,0 +1,38 @@
+name: SageMaker Pipeline CI
+
+on:
+  pull_request:
+    branches: [main, uat, production]
+
+jobs:
+  ci-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Lint Python code
+      run: |
+        flake8 pipeline/*.py --max-line-length=120
+
+    - name: Check trailing whitespace
+      run: |
+        git grep -n '[[:blank:]]$' || echo "No trailing whitespace found"
+
+    - name: Run unit tests
+      run: |
+        pytest tests/
+
+    # - name: Check notebook outputs are stripped
+    #   run: |
+    #     nbstripout --check --exit-zero-on-clean pipeline/*.ipynb
