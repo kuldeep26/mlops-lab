@@ -1,0 +1,32 @@
+name: SageMaker Pipeline CD
+
+on:
+  push:
+    branches: [main, uat, production]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ap-south-1   # update region if needed
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run SageMaker pipeline notebook
+      run: |
+        papermill pipeline/pipeline_definition.ipynb output-${{ github.ref_name }}.ipynb \
+          -p InputDataUrl "s3://mlops-testing-bucket-kulsin/sample-data.csv"
