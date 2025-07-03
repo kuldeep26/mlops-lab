@@ -11,7 +11,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ap-south-1   # update region if needed
+      AWS_DEFAULT_REGION: us-east-1   # update region if needed
 
     steps:
     - name: Checkout code
@@ -25,8 +25,12 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
+    - name: Install Python kernel
+      run: |
+        pip install ipykernel
+        python -m ipykernel install --user --name=python3
 
     - name: Run SageMaker pipeline notebook
       run: |
-        papermill pipeline/pipeline_definition.ipynb output-${{ github.ref_name }}.ipynb \
-          -p InputDataUrl "s3://mlops-testing-bucket-kulsin/sample-data.csv"
+        papermill pipeline/pipeline_definition.ipynb output-main.ipynb \
+        -p InputDataUrl "s3://mlops-testing-bucket-kulsin/sample-data.csv"
