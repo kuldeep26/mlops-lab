@@ -3,3 +3,5 @@
 pipeline/.ipynb_checkpoints/pipeline_definition-checkpoint.ipynb
 pipeline/.ipynb_checkpoints/processing_script-checkpoint.py
 pipeline/.ipynb_checkpoints/train-checkpoint.py
+.github/workflows/.ipynb_checkpoints/cd-checkpoint.yml
+*_checkpoints
