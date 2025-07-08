@@ -44,7 +44,7 @@ jobs:
 
     - name: Upload notebook output
       if: always()  # This ensures the output is uploaded even if the previous step fails
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: notebook-output
         path: |
