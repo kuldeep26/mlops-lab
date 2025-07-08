@@ -9,13 +9,19 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: us-east-1   # update region if needed
+      AWS_REGION: us-east-1           # should match DEFAULT_REGION
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -24,7 +30,9 @@ jobs:
 
     - name: Install dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
+
     - name: Install Python kernel
       run: |
         pip install ipykernel
@@ -32,5 +40,19 @@ jobs:
 
     - name: Run SageMaker pipeline notebook
       run: |
-        papermill pipeline/pipeline_definition.ipynb output-main.ipynb
+        papermill pipeline/pipeline_definition.ipynb output-main.ipynb --log-output
 
+    - name: Upload notebook output
+      if: always()  # This ensures the output is uploaded even if the previous step fails
+      uses: actions/upload-artifact@v3
+      with:
+        name: notebook-output
+        path: |
+          output-main.ipynb
+          pipeline/*.py
+
+    - name: Display error logs
+      if: failure()
+      run: |
+        echo "Notebook execution failed. Displaying last few lines of output:"
+        tail -n 50 output-main.ipynb
