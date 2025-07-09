@@ -40,7 +40,8 @@ jobs:
 
     - name: Run SageMaker pipeline notebook
       run: |
-        papermill pipeline/pipeline_definition.ipynb output-main.ipynb --log-output
+        cd pipeline
+        papermill pipeline_definition.ipynb ../output-main.ipynb --log-output
 
     - name: Upload notebook output
       if: always()  # This ensures the output is uploaded even if the previous step fails
