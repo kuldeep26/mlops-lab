@@ -36,13 +36,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt ipykernel
+    
+    - name: Debug check file exists
+      run: |
+        folder="pipeline/${{ github.event.inputs.pipeline_name }}"
+        config_path="$folder/config/${{ github.event.inputs.environment }}.json"
+        echo "Checking for file: $config_path"
+        ls -la "$config_path"
 
     - name: Execute selected pipeline notebook
       run: |
         folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config="pipeline/${{ github.event.inputs.pipeline_name }}/config/${{ github.event.inputs.environment }}.json"
-        papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb \
-          -p config_file_path $folder/config/${{ github.event.inputs.environment }}.json
+        config_path="$folder/config/${{ github.event.inputs.environment }}.json"
+        echo "Using config path: $config_path"
+        papermill "$folder/pipeline_definition.ipynb" "output-${{ github.event.inputs.pipeline_name }}.ipynb" \
+          -p config_file_path "$config_path"
+
 
     - name: Upload output
       if: always()
