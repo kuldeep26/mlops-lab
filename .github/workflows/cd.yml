@@ -47,10 +47,14 @@ jobs:
     - name: Execute selected pipeline notebook
       run: |
         folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config="pipeline/${{ github.event.inputs.pipeline_name }}/config/${{ github.event.inputs.environment }}.json"
-        echo "Using config path: $config"
-        CONFIG_PATH=$config \
+        config_path="$folder/config/${{ github.event.inputs.environment }}.json"
+        echo "Using config: $config_path"
+
+        # Export ENV variable to be used inside notebook
+        export CONFIG_FILE_PATH=$config_path
+
         papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb
+
 
 
 
