@@ -40,7 +40,7 @@ jobs:
     - name: Execute selected pipeline notebook
       run: |
         folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config="config/${{ github.event.inputs.environment }}.json"
+        config="pipeline/${{ github.event.inputs.pipeline_name }}/config/${{ github.event.inputs.environment }}.json"
         papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb \
           -p config_file_path $folder/config/${{ github.event.inputs.environment }}.json
 
