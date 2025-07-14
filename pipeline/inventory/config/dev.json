@@ -2,5 +2,8 @@
   "pipeline_name": "DevInventoryPipeline",
   "input_data": "s3://mlops-testing-bucket-kulsin/sample-data.csv",
   "role": "arn:aws:iam::282698011778:role/service-role/AmazonSageMaker-ExecutionRole-20250701T225193",
-  "region": "us-east-1"
+  "region": "us-east-1",
+  "schedule_name": "DevInventoryPipelineSchedule",
+  "kms_key_arn": "arn:aws:kms:us-east-1:282698011778:key/3f2f4b4e-7ea0-482d-99f7-b35c84bba8e0",
+  "schedule_expression": "cron(0 12 * * ? *)"
 }
