@@ -49,29 +49,26 @@ jobs:
           echo "Unsupported branch name: $BRANCH_NAME"
           exit 1
         fi
-        echo "ENVIRONMENT=$ENV" >> $GITHUB_OUTPUT
-    
+        echo "ENVIRONMENT=$ENV" >> "$GITHUB_OUTPUT"
+
     - name: Debug check file exists
       run: |
         folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config_path="$folder/config/$ENVIRONMENT.json"
+        config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
         echo "Checking for file: $config_path"
         ls -la "$config_path"
-        echo "value of enviroment: $ENVIRONMENT"
+        echo "value of environment: ${{ steps.env_map.outputs.ENVIRONMENT }}"
 
     - name: Execute selected pipeline notebook
       run: |
         folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config_path="$folder/config/$ENVIRONMENT.json"
+        config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
         echo "Using config: $config_path"
 
         # Export ENV variable to be used inside notebook
         export CONFIG_FILE_PATH=$config_path
 
         papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb
-
-
-
 
     - name: Upload output
       if: always()
