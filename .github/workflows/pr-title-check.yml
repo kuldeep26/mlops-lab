@@ -1,0 +1,67 @@
+name: Validate PR title against changed paths
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  validate-pr-title:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # So we get the full diff
+
+    - name: Get PR title
+      id: pr_title
+      run: |
+        echo "pr_title=$(jq -r .pull_request.title "$GITHUB_EVENT_PATH")" >> $GITHUB_OUTPUT
+
+    - name: Get changed files
+      id: changed_files
+      run: |
+        FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+        echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+        echo "$FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Validate PR title
+      run: |
+        echo "Checking PR title: ${{ steps.pr_title.outputs.pr_title }}"
+        echo "Changed files:"
+        echo "${{ steps.changed_files.outputs.changed_files }}"
+
+        PR_TITLE="${{ steps.pr_title.outputs.pr_title }}"
+        CHANGED_FILES="${{ steps.changed_files.outputs.changed_files }}"
+
+        # Determine the pipeline or area affected
+        PIPELINE=""
+        for file in $CHANGED_FILES; do
+          if [[ $file == pipeline/inventory/* ]]; then
+            PIPELINE="inventory"
+            break
+          elif [[ $file == pipeline/c2-vuln-job/* ]]; then
+            PIPELINE="c2-vuln-job"
+            break
+          elif [[ $file == pipeline/maro-security/* ]]; then
+            PIPELINE="maro-security"
+            break
+          elif [[ $file =~ ^(\.github/|requirements\.txt|README\.md|\.gitignore) ]]; then
+            PIPELINE="mlops-lab-admin"
+            break
+          fi
+        done
+
+        if [[ -z "$PIPELINE" ]]; then
+          echo "❌ Unable to determine pipeline based on changed files."
+          exit 1
+        fi
+
+        echo "Expected PR title to start with: $PIPELINE:"
+        if [[ $PR_TITLE != "$PIPELINE:"* ]]; then
+          echo "❌ PR title must start with \"$PIPELINE:\". Found: \"$PR_TITLE\""
+          exit 1
+        else
+          echo "✅ PR title is valid."
+        fi
