@@ -1,8 +1,8 @@
 name: SageMaker Pipeline CI
 
-on:
-  pull_request:
-    branches: [main, uat, production]
+# on:
+#   pull_request:
+#     branches: [main, uat, production]
 
 jobs:
   ci-checks:
