@@ -47,7 +47,7 @@ jobs:
           elif [[ $file == pipeline/maro-security/* ]]; then
             PIPELINE="maro-security"
             break
-          elif [[ $file =~ ^(\.github/|requirements\.txt|README\.md|\.gitignore) ]]; then
+          elif [[ ! $file =~ ^pipeline/ ]]; then
             PIPELINE="mlops-lab-admin"
             break
           fi
