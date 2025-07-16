@@ -1,4 +1,4 @@
-name: SageMaker Pipeline CD
+name: SageMaker Pipeline deployment
 
 on:
   workflow_dispatch:
