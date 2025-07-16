@@ -7,99 +7,97 @@ on:
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
     outputs:
-      pipeline: ${{ steps.detect.outputs.pipeline }}
-      root_changed: ${{ steps.detect.outputs.root_changed }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get install -y jq
-
-      - name: Get changed files via API
-        id: detect
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Fetching changed files for PR #${{ github.event.pull_request.number }}"
-          FILES=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            | jq -r '.[].filename')
-
-          echo "Changed files:"
-          echo "$FILES"
-
-          PIPELINE=""
-          ROOT_CHANGED="false"
-
-          for file in $FILES; do
-            if [[ $file =~ ^pipelines/([^/]+)/ ]]; then
-              PIPELINE="${BASH_REMATCH[1]}"
-            elif [[ $file =~ ^(\.github/|README\.md|\.gitignore|requirements\.txt) ]]; then
-              ROOT_CHANGED="true"
-            fi
-          done
-
-          echo "pipeline=$PIPELINE" >> $GITHUB_OUTPUT
-          echo "root_changed=$ROOT_CHANGED" >> $GITHUB_OUTPUT
-          echo "Detected pipeline: $PIPELINE"
-          echo "Root changed: $ROOT_CHANGED"
-
-  validate-pr-title:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    steps:
-      - name: Validate PR title
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          PIPELINE="${{ needs.detect-changes.outputs.pipeline }}"
-          ROOT_CHANGED="${{ needs.detect-changes.outputs.root_changed }}"
-
-          echo "PR Title: $TITLE"
-          echo "Pipeline detected: $PIPELINE"
-          echo "Root changed: $ROOT_CHANGED"
-
-          if [[ "$ROOT_CHANGED" == "true" ]]; then
-            if [[ ! "$TITLE" =~ ^mlops-lab-admin: ]]; then
-              echo "❌ PR title must start with 'mlops-lab-admin:' for root-level changes."
-              exit 1
-            fi
-          elif [[ -n "$PIPELINE" ]]; then
-            if [[ ! "$TITLE" =~ ^$PIPELINE: ]]; then
-              echo "❌ PR title must start with '$PIPELINE:' for changes in pipeline folder."
-              exit 1
-            fi
-          else
-            echo "⚠️ No relevant files changed; skipping validation."
-          fi
-
-  lint-json-yaml:
-    runs-on: ubuntu-latest
-    needs: detect-changes
+      pipeline_folder: ${{ steps.detect.outputs.pipeline_folder }}
+      only_workflow_changes: ${{ steps.detect.outputs.only_workflow_changes }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install linters
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq yamllint
+      - name: Get changed files
+        id: get_changed_files
+        uses: tj-actions/changed-files@v41
+        with:
+          fetch_depth: 0
 
-      - name: Validate JSON files
+      - name: Detect which pipeline folder changed
+        id: detect
         run: |
-          find . -name "*.json" -exec jq empty {} \;
+          echo "Detecting pipeline and workflow changes..."
+          PIPELINE_FOLDER=""
+          WORKFLOW_CHANGED=false
+          PIPELINE_CHANGED=false
 
-      - name: Validate YAML files
-        run: |
-          yamllint .
+          for file in ${{ steps.get_changed_files.outputs.all_changed_files }}; do
+            if [[ $file == pipeline/* ]]; then
+              PIPELINE_CHANGED=true
+              PIPELINE_FOLDER=$(echo $file | cut -d/ -f2)
+            elif [[ $file =~ ^(\.github/|requirements\.txt|README\.md|\.gitignore) ]]; then
+              WORKFLOW_CHANGED=true
+            fi
+          done
 
-  lint-python-and-tests:
+          # Check for mixed changes
+          if [[ "$PIPELINE_CHANGED" == true && "$WORKFLOW_CHANGED" == true ]]; then
+            echo "❌ Mixed changes detected: pipeline + workflow/root files. Please split into separate PRs."
+            exit 1
+          fi
+
+          # Output values
+          echo "pipeline_folder=$PIPELINE_FOLDER" >> $GITHUB_OUTPUT
+          if [[ "$PIPELINE_CHANGED" == true ]]; then
+            echo "only_workflow_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "only_workflow_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+  pr-title-check:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.root_changed != 'true'
+    steps:
+      - name: Validate PR title format
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          PIPELINE_FOLDER="${{ needs.detect-changes.outputs.pipeline_folder }}"
+          ONLY_WORKFLOW="${{ needs.detect-changes.outputs.only_workflow_changes }}"
+
+          echo "PR title: $TITLE"
+          echo "Pipeline folder: $PIPELINE_FOLDER"
+          echo "Only workflow changes: $ONLY_WORKFLOW"
+
+          if [[ "$ONLY_WORKFLOW" == "true" ]]; then
+            if [[ ! "$TITLE" =~ ^mlops-lab-admin: ]]; then
+              echo "❌ Invalid PR title. For workflow/root changes, title must start with: mlops-lab-admin:<message>"
+              exit 1
+            fi
+          else
+            if [[ ! "$TITLE" =~ ^$PIPELINE_FOLDER: ]]; then
+              echo "❌ Invalid PR title. For pipeline changes in '$PIPELINE_FOLDER', title must start with: $PIPELINE_FOLDER:<message>"
+              exit 1
+            fi
+          fi
+
+  workflow-checks:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pr-title-check]
+    if: needs.detect-changes.outputs.only_workflow_changes == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for trailing whitespace
+        run: |
+          if git grep -n '[[:blank:]]$'; then
+            echo "❌ Trailing whitespace found. Remove it."
+            exit 1
+          else
+            echo "✅ No trailing whitespace found."
+          fi
+
+  pipeline-checks:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pr-title-check]
+    if: needs.detect-changes.outputs.only_workflow_changes == 'false'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -107,27 +105,47 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install pipeline-specific dependencies
+      - name: Install pipeline dependencies
         run: |
-          PIPELINE="${{ needs.detect-changes.outputs.pipeline }}"
-          if [[ -n "$PIPELINE" ]]; then
-            pip install -r "pipelines/$PIPELINE/requirements.txt"
+          PIPELINE_FOLDER="${{ needs.detect-changes.outputs.pipeline_folder }}"
+          echo "Installing dependencies for pipeline: $PIPELINE_FOLDER"
+          if [ -f "pipeline/$PIPELINE_FOLDER/requirements.txt" ]; then
+            pip install -r pipeline/$PIPELINE_FOLDER/requirements.txt
           else
-            echo "No pipeline detected; skipping dependency install."
+            echo "⚠️ No requirements.txt found in pipeline/$PIPELINE_FOLDER"
           fi
 
-      - name: Lint Python code
+      - name: Lint Python files
         run: |
-          if [[ -n "$PIPELINE" ]]; then
-            flake8 "pipelines/$PIPELINE" --max-line-length=120
+          echo "Running flake8 lint check..."
+          if ! flake8 pipeline/${{ needs.detect-changes.outputs.pipeline_folder }} --max-line-length=120; then
+            echo "❌ Linting errors found. Fix issues and retry."
+            exit 1
           fi
 
-      - name: Check trailing whitespace
+      - name: Check for trailing whitespace
         run: |
-          git grep -n '[[:blank:]]$' || echo "No trailing whitespace found"
+          if git grep -n '[[:blank:]]$'; then
+            echo "❌ Trailing whitespace found. Remove it."
+            exit 1
+          else
+            echo "✅ No trailing whitespace found."
+          fi
 
-      - name: Run unit tests
+      - name: Validate notebook outputs
         run: |
-          pytest tests/
+          echo "Checking that notebook outputs are stripped..."
+          if ! pip install nbstripout; then
+            echo "❌ Failed to install nbstripout"
+            exit 1
+          fi
+          nbstripout --check pipeline/${{ needs.detect-changes.outputs.pipeline_folder }}/*.ipynb || \
+            (echo "❌ Notebook outputs found. Please clear outputs and commit again." && exit 1)
+
+      - name: Run Pytest
+        run: |
+          echo "Running tests..."
+          pytest pipeline/${{ needs.detect-changes.outputs.pipeline_folder }}/tests || \
+            (echo "❌ Tests failed. Fix failing tests before merging." && exit 1)

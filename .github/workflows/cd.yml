@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pipeline_name:
-        description: 'Name of the pipeline folder (e.g., inventory)'
+        description: "Name of the pipeline folder (e.g., inventory)"
         required: true
 
 jobs:
@@ -14,72 +14,72 @@ jobs:
       AWS_REGION: us-east-1
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install dependencies
-      run: |
-        folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        if [ -f "$folder/requirements.txt" ]; then
-          echo "Installing dependencies from $folder/requirements.txt"
-          python -m pip install --upgrade pip
-          pip install -r "$folder/requirements.txt" ipykernel
-        else
-          echo "No requirement.txt file found in $folder"
-        fi
+      - name: Install dependencies
+        run: |
+          folder="pipeline/${{ github.event.inputs.pipeline_name }}"
+          if [ -f "$folder/requirements.txt" ]; then
+            echo "Installing dependencies from $folder/requirements.txt"
+            python -m pip install --upgrade pip
+            pip install -r "$folder/requirements.txt" ipykernel
+          else
+            echo "No requirement.txt file found in $folder"
+          fi
 
-    - name: Determine environment from branch
-      id: env_map
-      run: |
-        BRANCH_NAME="${GITHUB_REF##*/}"
-        echo "Branch is: $BRANCH_NAME"
-        if [[ "$BRANCH_NAME" == "development" ]]; then
-          ENV="dev"
-        elif [[ "$BRANCH_NAME" == "uat" ]]; then
-          ENV="uat"
-        elif [[ "$BRANCH_NAME" == "main" ]]; then
-          ENV="production"
-        else
-          echo "Unsupported branch name: $BRANCH_NAME"
-          exit 1
-        fi
-        echo "ENVIRONMENT=$ENV" >> "$GITHUB_OUTPUT"
+      - name: Determine environment from branch
+        id: env_map
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+          echo "Branch is: $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" == "development" ]]; then
+            ENV="dev"
+          elif [[ "$BRANCH_NAME" == "uat" ]]; then
+            ENV="uat"
+          elif [[ "$BRANCH_NAME" == "main" ]]; then
+            ENV="production"
+          else
+            echo "Unsupported branch name: $BRANCH_NAME"
+            exit 1
+          fi
+          echo "ENVIRONMENT=$ENV" >> "$GITHUB_OUTPUT"
 
-    - name: Debug check file exists
-      run: |
-        folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
-        echo "Checking for file: $config_path"
-        ls -la "$config_path"
-        echo "value of environment: ${{ steps.env_map.outputs.ENVIRONMENT }}"
+      - name: Debug check file exists
+        run: |
+          folder="pipeline/${{ github.event.inputs.pipeline_name }}"
+          config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
+          echo "Checking for file: $config_path"
+          ls -la "$config_path"
+          echo "value of environment: ${{ steps.env_map.outputs.ENVIRONMENT }}"
 
-    - name: Execute selected pipeline notebook
-      run: |
-        folder="pipeline/${{ github.event.inputs.pipeline_name }}"
-        config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
-        echo "Using config: $config_path"
+      - name: Execute selected pipeline notebook
+        run: |
+          folder="pipeline/${{ github.event.inputs.pipeline_name }}"
+          config_path="$folder/config/${{ steps.env_map.outputs.ENVIRONMENT }}.json"
+          echo "Using config: $config_path"
 
-        # Export ENV variable to be used inside notebook
-        export CONFIG_FILE_PATH=$config_path
+          # Export ENV variable to be used inside notebook
+          export CONFIG_FILE_PATH=$config_path
 
-        papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb
+          papermill $folder/pipeline_definition.ipynb output-${{ github.event.inputs.pipeline_name }}.ipynb
 
-    - name: Upload output
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: notebook-output
-        path: |
-          output-*.ipynb
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-output
+          path: |
+            output-*.ipynb
