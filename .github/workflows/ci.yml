@@ -1,38 +1,151 @@
 name: SageMaker Pipeline CI
 
-# on:
-#   pull_request:
-#     branches: [main, uat, production]
+on:
+  pull_request:
+    branches: [main, uat, development]
 
 jobs:
-  ci-checks:
+  detect-changes:
     runs-on: ubuntu-latest
-
+    outputs:
+      pipeline_folder: ${{ steps.detect.outputs.pipeline_folder }}
+      only_workflow_changes: ${{ steps.detect.outputs.only_workflow_changes }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Get changed files
+        id: get_changed_files
+        uses: tj-actions/changed-files@v41
+        with:
+          fetch_depth: 0
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
+      - name: Detect which pipeline folder changed
+        id: detect
+        run: |
+          echo "Detecting pipeline and workflow changes..."
+          PIPELINE_FOLDER=""
+          WORKFLOW_CHANGED=false
+          PIPELINE_CHANGED=false
 
-    - name: Lint Python code
-      run: |
-        flake8 pipeline/*.py --max-line-length=120
+          for file in ${{ steps.get_changed_files.outputs.all_changed_files }}; do
+            if [[ $file == pipeline/* ]]; then
+              PIPELINE_CHANGED=true
+              PIPELINE_FOLDER=$(echo $file | cut -d/ -f2)
+            elif [[ $file =~ ^(\.github/|requirements\.txt|README\.md|\.gitignore) ]]; then
+              WORKFLOW_CHANGED=true
+            fi
+          done
 
-    - name: Check trailing whitespace
-      run: |
-        git grep -n '[[:blank:]]$' || echo "No trailing whitespace found"
+          # Check for mixed changes
+          if [[ "$PIPELINE_CHANGED" == true && "$WORKFLOW_CHANGED" == true ]]; then
+            echo "❌ Mixed changes detected: pipeline + workflow/root files. Please split into separate PRs."
+            exit 1
+          fi
 
-    - name: Run unit tests
-      run: |
-        pytest tests/
+          # Output values
+          echo "pipeline_folder=$PIPELINE_FOLDER" >> $GITHUB_OUTPUT
+          if [[ "$PIPELINE_CHANGED" == true ]]; then
+            echo "only_workflow_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "only_workflow_changes=true" >> $GITHUB_OUTPUT
+          fi
 
-    # - name: Check notebook outputs are stripped
-    #   run: |
-    #     nbstripout --check --exit-zero-on-clean pipeline/*.ipynb
+  pr-title-check:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    steps:
+      - name: Validate PR title format
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          PIPELINE_FOLDER="${{ needs.detect-changes.outputs.pipeline_folder }}"
+          ONLY_WORKFLOW="${{ needs.detect-changes.outputs.only_workflow_changes }}"
+
+          echo "PR title: $TITLE"
+          echo "Pipeline folder: $PIPELINE_FOLDER"
+          echo "Only workflow changes: $ONLY_WORKFLOW"
+
+          if [[ "$ONLY_WORKFLOW" == "true" ]]; then
+            if [[ ! "$TITLE" =~ ^mlops-lab-admin: ]]; then
+              echo "❌ Invalid PR title. For workflow/root changes, title must start with: mlops-lab-admin:<message>"
+              exit 1
+            fi
+          else
+            if [[ ! "$TITLE" =~ ^$PIPELINE_FOLDER: ]]; then
+              echo "❌ Invalid PR title. For pipeline changes in '$PIPELINE_FOLDER', title must start with: $PIPELINE_FOLDER:<message>"
+              exit 1
+            fi
+          fi
+
+  workflow-checks:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pr-title-check]
+    if: needs.detect-changes.outputs.only_workflow_changes == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for trailing whitespace
+        run: |
+          if git grep -n '[[:blank:]]$'; then
+            echo "❌ Trailing whitespace found. Remove it."
+            exit 1
+          else
+            echo "✅ No trailing whitespace found."
+          fi
+
+  pipeline-checks:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, pr-title-check]
+    if: needs.detect-changes.outputs.only_workflow_changes == 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install pipeline dependencies
+        run: |
+          PIPELINE_FOLDER="${{ needs.detect-changes.outputs.pipeline_folder }}"
+          echo "Installing dependencies for pipeline: $PIPELINE_FOLDER"
+          if [ -f "pipeline/$PIPELINE_FOLDER/requirements.txt" ]; then
+            pip install -r pipeline/$PIPELINE_FOLDER/requirements.txt
+          else
+            echo "⚠️ No requirements.txt found in pipeline/$PIPELINE_FOLDER"
+          fi
+
+      - name: Lint Python files
+        run: |
+          echo "Running flake8 lint check..."
+          if ! flake8 pipeline/${{ needs.detect-changes.outputs.pipeline_folder }} --max-line-length=120; then
+            echo "❌ Linting errors found. Fix issues and retry."
+            exit 1
+          fi
+
+      - name: Check for trailing whitespace
+        run: |
+          if git grep -n '[[:blank:]]$'; then
+            echo "❌ Trailing whitespace found. Remove it."
+            exit 1
+          else
+            echo "✅ No trailing whitespace found."
+          fi
+
+      - name: Validate notebook outputs
+        run: |
+          echo "Checking that notebook outputs are stripped..."
+          if ! pip install nbstripout; then
+            echo "❌ Failed to install nbstripout"
+            exit 1
+          fi
+          nbstripout --check pipeline/${{ needs.detect-changes.outputs.pipeline_folder }}/*.ipynb || \
+            (echo "❌ Notebook outputs found. Please clear outputs and commit again." && exit 1)
+
+      - name: Run Pytest
+        run: |
+          echo "Running tests..."
+          pytest pipeline/${{ needs.detect-changes.outputs.pipeline_folder }}/tests || \
+            (echo "❌ Tests failed. Fix failing tests before merging." && exit 1)
