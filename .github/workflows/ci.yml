@@ -1,4 +1,4 @@
-name: SageMaker Pipeline CI
+name: SageMaker Pipeline CI checks
 
 on:
   pull_request:
