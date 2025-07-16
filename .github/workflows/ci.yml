@@ -1,38 +1,133 @@
 name: SageMaker Pipeline CI
 
-# on:
-#   pull_request:
-#     branches: [main, uat, production]
+on:
+  pull_request:
+    branches: [main, uat, development]
 
 jobs:
-  ci-checks:
+  detect-changes:
     runs-on: ubuntu-latest
-
+    permissions:
+      pull-requests: read
+    outputs:
+      pipeline: ${{ steps.detect.outputs.pipeline }}
+      root_changed: ${{ steps.detect.outputs.root_changed }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get install -y jq
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
+      - name: Get changed files via API
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching changed files for PR #${{ github.event.pull_request.number }}"
+          FILES=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            | jq -r '.[].filename')
 
-    - name: Lint Python code
-      run: |
-        flake8 pipeline/*.py --max-line-length=120
+          echo "Changed files:"
+          echo "$FILES"
 
-    - name: Check trailing whitespace
-      run: |
-        git grep -n '[[:blank:]]$' || echo "No trailing whitespace found"
+          PIPELINE=""
+          ROOT_CHANGED="false"
 
-    - name: Run unit tests
-      run: |
-        pytest tests/
+          for file in $FILES; do
+            if [[ $file =~ ^pipelines/([^/]+)/ ]]; then
+              PIPELINE="${BASH_REMATCH[1]}"
+            elif [[ $file =~ ^(\.github/|README\.md|\.gitignore|requirements\.txt) ]]; then
+              ROOT_CHANGED="true"
+            fi
+          done
 
-    # - name: Check notebook outputs are stripped
-    #   run: |
-    #     nbstripout --check --exit-zero-on-clean pipeline/*.ipynb
+          echo "pipeline=$PIPELINE" >> $GITHUB_OUTPUT
+          echo "root_changed=$ROOT_CHANGED" >> $GITHUB_OUTPUT
+          echo "Detected pipeline: $PIPELINE"
+          echo "Root changed: $ROOT_CHANGED"
+
+  validate-pr-title:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    steps:
+      - name: Validate PR title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          PIPELINE="${{ needs.detect-changes.outputs.pipeline }}"
+          ROOT_CHANGED="${{ needs.detect-changes.outputs.root_changed }}"
+
+          echo "PR Title: $TITLE"
+          echo "Pipeline detected: $PIPELINE"
+          echo "Root changed: $ROOT_CHANGED"
+
+          if [[ "$ROOT_CHANGED" == "true" ]]; then
+            if [[ ! "$TITLE" =~ ^mlops-lab-admin: ]]; then
+              echo "❌ PR title must start with 'mlops-lab-admin:' for root-level changes."
+              exit 1
+            fi
+          elif [[ -n "$PIPELINE" ]]; then
+            if [[ ! "$TITLE" =~ ^$PIPELINE: ]]; then
+              echo "❌ PR title must start with '$PIPELINE:' for changes in pipeline folder."
+              exit 1
+            fi
+          else
+            echo "⚠️ No relevant files changed; skipping validation."
+          fi
+
+  lint-json-yaml:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq yamllint
+
+      - name: Validate JSON files
+        run: |
+          find . -name "*.json" -exec jq empty {} \;
+
+      - name: Validate YAML files
+        run: |
+          yamllint .
+
+  lint-python-and-tests:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.root_changed != 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install pipeline-specific dependencies
+        run: |
+          PIPELINE="${{ needs.detect-changes.outputs.pipeline }}"
+          if [[ -n "$PIPELINE" ]]; then
+            pip install -r "pipelines/$PIPELINE/requirements.txt"
+          else
+            echo "No pipeline detected; skipping dependency install."
+          fi
+
+      - name: Lint Python code
+        run: |
+          if [[ -n "$PIPELINE" ]]; then
+            flake8 "pipelines/$PIPELINE" --max-line-length=120
+          fi
+
+      - name: Check trailing whitespace
+        run: |
+          git grep -n '[[:blank:]]$' || echo "No trailing whitespace found"
+
+      - name: Run unit tests
+        run: |
+          pytest tests/

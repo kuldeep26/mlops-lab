@@ -31,8 +31,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt ipykernel
+        folder="pipeline/${{ github.event.inputs.pipeline_name }}"
+        if [ -f "$folder/requirements.txt" ]; then
+          echo "Installing dependencies from $folder/requirements.txt"
+          python -m pip install --upgrade pip
+          pip install -r "$folder/requirements.txt" ipykernel
+        else
+          echo "No requirement.txt file found in $folder"
+        fi
 
     - name: Determine environment from branch
       id: env_map
