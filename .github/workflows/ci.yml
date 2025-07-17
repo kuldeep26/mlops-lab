@@ -134,15 +134,17 @@ jobs:
             echo "✅ No trailing whitespace found."
           fi
 
-      - name: Validate notebook outputs
+      - name: Check that notebook outputs are stripped
         run: |
           echo "Checking that notebook outputs are stripped..."
-          if ! pip install nbstripout; then
-            echo "❌ Failed to install nbstripout"
+          pip install nbstripout
+          if ! nbstripout --dry-run --verify pipeline/**/*.ipynb; then
+            echo "❌ Notebook outputs found. Please clear outputs before committing."
+            echo "Run locally: nbstripout pipeline/**/*.ipynb"
             exit 1
+          else
+            echo "✅ All notebook outputs are stripped."
           fi
-          nbstripout --check pipeline/${{ needs.detect-changes.outputs.pipeline_folder }}/*.ipynb || \
-            (echo "❌ Notebook outputs found. Please clear outputs and commit again." && exit 1)
 
       - name: Run Pytest
         run: |

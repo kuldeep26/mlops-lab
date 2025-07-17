@@ -18,7 +18,7 @@ def main():
     logger.info(f"Files in input directory: {os.listdir(args.input_data)}")
 
     try:
-        # List files in the input directory
+        # List files in input directory
         input_files = os.listdir(args.input_data)
         logger.info(f"Found files: {input_files}")
 

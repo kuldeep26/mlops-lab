@@ -1,7 +1,17 @@
-.ipynb_checkpoints/.gitignore-checkpoint
-.ipynb_checkpoints/.ipynb_checkpoints/.gitignore-checkpoint-checkpoint
-pipeline/.ipynb_checkpoints/pipeline_definition-checkpoint.ipynb
-pipeline/.ipynb_checkpoints/processing_script-checkpoint.py
-pipeline/.ipynb_checkpoints/train-checkpoint.py
-.github/workflows/.ipynb_checkpoints/cd-checkpoint.yml
+*/*.ipynb_checkpoints/
+*.ipynb_checkpoints
 *_checkpoints
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
