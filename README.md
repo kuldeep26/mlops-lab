@@ -1,6 +1,6 @@
 MLOps Lab – CI & Local Development Guide
 This repository enforces CI checks for YAML formatting, Python linting, PR title validation, and Jupyter notebook output stripping.
-Follow this guide to fix issues locally before committing or pushing code.
+Follow this guide to fix issues locally before committing or pushing code..
 
 ✅ CI Checks Overview
 The CI pipeline validates the following:
