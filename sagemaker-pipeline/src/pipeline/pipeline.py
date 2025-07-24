@@ -10,13 +10,13 @@ from .config import MLPipelineConfig
 
 class SageMakerPipeline:
     """Class to handle SageMaker Pipeline operations"""
-    
+
     def __init__(self, pipeline_name: str):
         self.pipeline_name = pipeline_name
         self.config = MLPipelineConfig()
         self.session = sagemaker.session.Session()
         self.role = sagemaker.get_execution_role()
-        
+
     def _create_pipeline_parameters(self) -> List:
         """Create and return pipeline parameters"""
         return [
@@ -65,7 +65,7 @@ class SageMakerPipeline:
             code=self.config.PROCESSING_CODE
         )
 
-    def _create_training_step(self, training_instance_count: ParameterInteger, 
+    def _create_training_step(self, training_instance_count: ParameterInteger,
                             process_step: ProcessingStep) -> TrainingStep:
         """Create and return the model training step"""
         estimator = Estimator(
@@ -129,7 +129,7 @@ def main():
     pipeline_builder = SageMakerPipeline("SampleDataAnalysisPipeline")
     pipeline = pipeline_builder.build()
     pipeline_builder.deploy(pipeline)
-    
+
     # Optional: Execute the pipeline
     pipeline_builder.execute(
         pipeline,
